@@ -44,7 +44,7 @@ Then open `http://127.0.0.1:8787`.
 ## Features
 
 - **Live game list** — pulled from Discord's own `/applications/detectable` endpoint (10,000+ titles). It's the same list Discord's client uses, so it's always in sync. New games appear automatically on each launch; a small offline fallback keeps the UI usable without a connection.
-- **Steam-detected games** — some titles (~8,900, e.g. AION 2) register **no process name** with Discord; Discord detects them through the local Steam client instead. The app shows them with a **Steam** badge and, when Steam is installed, simulates them — handling both cases (see [How it works](#how-it-works)): if the game is **installed**, a dummy process runs from its real install folder; if it is **not**, a temporary `appmanifest_<appid>.acf` (the file Steam creates while a download is in progress) is written into `steamapps/` and the dummy runs from `steamapps/common/<game>/`. Nothing is downloaded or installed — no game needs to be owned. Everything the app writes is removed when the session ends.
+- **Steam-detected games** — some titles (~8,900, e.g. AION 2) register **no process name** with Discord; Discord detects them through the local Steam client instead. The app shows them with a **Steam** badge and, when Steam is installed, simulates them — handling both cases (see [How it works](#how-it-works)): if the game is **installed**, a dummy process runs from its real install folder; if it is **not**, a temporary `appmanifest_<appid>.acf` is written into `steamapps/` and the dummy runs from `steamapps/common/<game>/`. Nothing is downloaded or installed — no game needs to be owned. Some titles (EA SPORTS FC 27) additionally need a Steam + Discord restart — there's a button for that. Everything the app writes is removed when the session ends.
 - **One-click simulate** — pick a game, set a duration, hit **Simulate**.
 - **Random duration range** — tick **Random** and set a *from / to* range (in minutes). Each run picks a random duration within it, so no two sessions are identical.
 - **Queue** — line up several games with the **+ Queue** buttons, then **Start queue**. They run one after another with a **random 1–3 minute gap** between each launch (the first game starts immediately). The whole thing is built to look like a human playing several games in a row.
@@ -69,9 +69,13 @@ Then open `http://127.0.0.1:8787`.
 **Steam-detected games** (no process name registered) have two paths, chosen automatically by checking the `appmanifest_<appid>.acf` files across all your Steam libraries:
 
 - **Game is installed** (real manifest with `StateFlags` bit 4): Discord cross-checks the registered install path, so a fake manifest in another library is ignored. The app writes a dummy named `<exe>_sim.exe` **next to the real binary** (never overwriting it) and runs it from there.
-- **Game is not installed anywhere**: the app writes a fake manifest into the main library (`StateFlags 1026` = "downloading", with realistic size/progress values) and runs a dummy named exactly like the real exe from `steamapps/common/<game>/` in that same library.
+- **Game is not installed anywhere**: the app writes a fake manifest into the main library (the minimal `StateFlags 4` format that the community verified on r/DiscordQuests) and runs a dummy named exactly like the real exe from `steamapps/common/<game>/` in that same library.
 
-Game metadata (install dir, exe path) comes from Steam's public APIs — no key or credentials required. All of this is verified on a real machine: in both cases the quest ring progresses, and everything the app writes (dummy, fake manifest, created folders) is removed when the session ends.
+Game metadata (install dir, exe path) comes from Steam's public APIs — no key or credentials required. For games whose Steam launch entry is a protocol (EA App titles like **EA SPORTS FC 27**, whose launch is `steam2ea://…` rather than an `.exe`), the real exe name isn't in any public API — the app uses a small table of verified names (e.g. `fc27.exe`) and falls back to a sensible guess otherwise.
+
+**Some games need a restart.** Community reports (and a real-machine test of FC 27) show that some titles only start accruing quest time **after Steam and Discord are fully restarted** with the fake manifest in place. The app has a **"↻ Restart Steam & Discord"** button in the green Steam box for exactly that: if the quest doesn't move within ~30 seconds, click it — it kills and relaunches both apps (you'll drop out of any voice channel), and the dummy process keeps running throughout.
+
+All of this is verified on a real machine: in every passing case the quest ring progresses, and everything the app writes (dummy, fake manifest, created folders) is removed when the session ends.
 
 Because a real process with the right name and a real window exist, Discord's own client does the reporting — nothing is forged at the API layer.
 
