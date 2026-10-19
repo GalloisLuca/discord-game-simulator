@@ -44,6 +44,7 @@ Then open `http://127.0.0.1:8787`.
 ## Features
 
 - **Live game list** — pulled from Discord's own `/applications/detectable` endpoint (10,000+ titles). It's the same list Discord's client uses, so it's always in sync. New games appear automatically on each launch; a small offline fallback keeps the UI usable without a connection.
+- **Steam-detected games** — some titles (~8,900, e.g. AION 2) register **no process name** with Discord; Discord detects them through the local Steam client instead. The app shows them with a **Steam** badge and, when Steam is installed, simulates them — handling both cases (see [How it works](#how-it-works)): if the game is **installed**, a dummy process runs from its real install folder; if it is **not**, a temporary `appmanifest_<appid>.acf` (the file Steam creates while a download is in progress) is written into `steamapps/` and the dummy runs from `steamapps/common/<game>/`. Nothing is downloaded or installed — no game needs to be owned. Everything the app writes is removed when the session ends.
 - **One-click simulate** — pick a game, set a duration, hit **Simulate**.
 - **Random duration range** — tick **Random** and set a *from / to* range (in minutes). Each run picks a random duration within it, so no two sessions are identical.
 - **Queue** — line up several games with the **+ Queue** buttons, then **Start queue**. They run one after another with a **random 1–3 minute gap** between each launch (the first game starts immediately). The whole thing is built to look like a human playing several games in a row.
@@ -64,6 +65,13 @@ Then open `http://127.0.0.1:8787`.
 2. The app writes an embedded ~15 KB GUI `.exe` (a visible window titled with the game name + an idle message loop) to
    `~/.discord-game-sim/games/<id>/<folder>/<exe>` — mirroring the game's real folder layout — and spawns it.
 3. Discord sees a matching **process** *and* a **visible window**, registers the game, and its own client fires the quest heartbeats.
+
+**Steam-detected games** (no process name registered) have two paths, chosen automatically by checking the `appmanifest_<appid>.acf` files across all your Steam libraries:
+
+- **Game is installed** (real manifest with `StateFlags` bit 4): Discord cross-checks the registered install path, so a fake manifest in another library is ignored. The app writes a dummy named `<exe>_sim.exe` **next to the real binary** (never overwriting it) and runs it from there.
+- **Game is not installed anywhere**: the app writes a fake manifest into the main library (`StateFlags 1026` = "downloading", with realistic size/progress values) and runs a dummy named exactly like the real exe from `steamapps/common/<game>/` in that same library.
+
+Game metadata (install dir, exe path) comes from Steam's public APIs — no key or credentials required. All of this is verified on a real machine: in both cases the quest ring progresses, and everything the app writes (dummy, fake manifest, created folders) is removed when the session ends.
 
 Because a real process with the right name and a real window exist, Discord's own client does the reporting — nothing is forged at the API layer.
 
@@ -101,7 +109,9 @@ Windows Security → Virus & threat protection → Manage settings → **Exclusi
 **Discord shows "Playing" but the quest doesn't progress**
 - Make sure **Activity Privacy** → *Share detected activities with others* is **on** for the logged-in account.
 - Wait ~10–15 seconds after launching before checking — Discord polls the process list on an interval.
-- Some games use Discord's **Steam-manifest** check (it verifies Steam has the game registered) rather than a plain process name. That's a rarer, separate path — let us know which game and it can be handled.
+
+**A Steam game (badge "Steam") is greyed out**
+The app couldn't find Steam. Install it (or start it once so the registry entry exists) and refresh the page. The green **Steam detected** box at the top of the page shows where Steam was found — a Steam game only needs Steam to be installed, not the game itself.
 
 **A "not found" error on an action (e.g. queue Stop)**
 You're likely talking to a **stale server** — an instance started before the code on disk. A running Node server only loads its routes at startup. Stop the running instance (Ctrl+C in its console, or end it in Task Manager) and start it again. The red **Stale server detected** banner appears automatically in this case.
@@ -116,7 +126,7 @@ Stopping a sim (or the queue) force-kills the process tree via `taskkill /F /T`.
 
 ## Quest compatibility
 
-- **Playtime-based quests** ✅ — the core use case: the fake session accrues real playtime toward `PLAY_ON_DESKTOP`-type quests (e.g. "play for 15 minutes").
+- **Playtime-based quests** ✅ — the core use case: the fake session accrues real playtime toward `PLAY_ON_DESKTOP`-type quests (e.g. "play for 15 minutes"). Works for both process-detected games **and** Steam-detected games (see above).
 - **Stream quests** ❌ — require a real Go Live with a second person in the voice channel.
 - **Achievement / in-game-action quests** ❌ — those need the game's own completion data, out of scope.
 
